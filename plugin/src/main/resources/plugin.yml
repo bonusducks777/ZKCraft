@@ -1,0 +1,14 @@
+```yaml
+name: ZKCraftTrade
+version: 1.0
+main: com.zkcraft.ZKCraftTrade
+api-version: 1.20
+commands:
+  zkc:
+    description: Main command for ZKCraftTrade plugin
+    usage: /<command> <wallet|rank|inventory|reload|info>
+permissions:
+  zkcraft.admin:
+    description: Allows access to admin commands
+    default: op
+```
