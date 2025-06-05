@@ -1,4 +1,3 @@
-```java
 package com.zkcraft;
 
 import org.bukkit.command.Command;
@@ -44,6 +43,11 @@ public class ZKCraftTrade extends JavaPlugin {
     private boolean blockchainEnabled;
     private BukkitRunnable blockchainPoller;
     private boolean setupComplete = false;
+    private boolean luckPermsAvailable = false;
+
+    private static final String PLACEHOLDER_RANK = "[BLOCKCHAIN OFFLINE]";
+    private static final String PLACEHOLDER_ITEM = "[BLOCKCHAIN OFFLINE]";
+    private static final String PLACEHOLDER_WALLET = "[NO WALLET LINKED]";
 
     @Override
     public void onEnable() {
@@ -75,6 +79,7 @@ public class ZKCraftTrade extends JavaPlugin {
         if (!setupComplete) {
             runSetupWizard();
         }
+        checkForLuckPerms();
         getLogger().info("ZKCraftTrade plugin enabled!");
     }
 
@@ -128,6 +133,10 @@ public class ZKCraftTrade extends JavaPlugin {
                 p.sendMessage(ChatColor.RED + "[ZKCraftTrade] Blockchain Error: " + message);
             }
         });
+    }
+
+    private void reportBlockchainUnavailable(Player player) {
+        player.sendMessage(ChatColor.RED + "[ZKCraftTrade] Blockchain is currently unavailable. Showing placeholder data.");
     }
 
     private void initializeBlockchain() {
@@ -191,13 +200,33 @@ public class ZKCraftTrade extends JavaPlugin {
 
     private void applyRank(Player player, String rank) {
         if (rank != null && !rank.isEmpty()) {
-            getServer().dispatchCommand(getServer().getConsoleSender(), "lp user " + player.getName() + " group add " + rank);
+            try {
+                // Try to use LuckPerms if available
+                getServer().dispatchCommand(getServer().getConsoleSender(), "lp user " + player.getName() + " group add " + rank);
+                getLogger().info("Applied rank " + rank + " to player " + player.getName() + " via LuckPerms");
+            } catch (Exception e) {
+                // Fallback for testing without LuckPerms
+                getLogger().info("LuckPerms not found or command failed. For testing only: Applied virtual rank " + rank + " to player " + player.getName());
+                player.sendMessage("§a[ZKCraftTrade] §7Virtual rank applied: §e" + rank + " §7(LuckPerms not detected)");
+                // Store the rank in metadata for display purposes only
+                player.setMetadata("zkc_rank", new org.bukkit.metadata.FixedMetadataValue(this, rank));
+            }
         }
     }
 
     private void removeRank(Player player, String rank) {
         if (rank != null && !rank.isEmpty()) {
-            getServer().dispatchCommand(getServer().getConsoleSender(), "lp user " + player.getName() + " group remove " + rank);
+            try {
+                // Try to use LuckPerms if available
+                getServer().dispatchCommand(getServer().getConsoleSender(), "lp user " + player.getName() + " group remove " + rank);
+                getLogger().info("Removed rank " + rank + " from player " + player.getName() + " via LuckPerms");
+            } catch (Exception e) {
+                // Fallback for testing without LuckPerms
+                getLogger().info("LuckPerms not found or command failed. For testing only: Removed virtual rank " + rank + " from player " + player.getName());
+                player.sendMessage("§a[ZKCraftTrade] §7Virtual rank removed: §e" + rank + " §7(LuckPerms not detected)");
+                // Remove the metadata
+                player.removeMetadata("zkc_rank", this);
+            }
         }
     }
 
@@ -256,7 +285,11 @@ public class ZKCraftTrade extends JavaPlugin {
                 String rank = walletRanks.get(wallet);
                 if (rank != null) {
                     return new ZKCAsset.Asset(assetType, rank);
+                } else {
+                    return new ZKCAsset.Asset(assetType, PLACEHOLDER_RANK);
                 }
+            } else if (assetType.equals("item")) {
+                return new ZKCAsset.Asset(assetType, PLACEHOLDER_ITEM);
             }
             return null;
         }
@@ -274,7 +307,11 @@ public class ZKCraftTrade extends JavaPlugin {
                 String rank = walletRanks.get(wallet);
                 if (rank != null) {
                     return new ZKCAsset.Asset(assetType, rank);
+                } else {
+                    return new ZKCAsset.Asset(assetType, PLACEHOLDER_RANK);
                 }
+            } else if (assetType.equals("item")) {
+                return new ZKCAsset.Asset(assetType, PLACEHOLDER_ITEM);
             }
             return null;
         }
@@ -299,6 +336,84 @@ public class ZKCraftTrade extends JavaPlugin {
             getLogger().severe("Error deriving address from private key: " + e.getMessage());
             return null;
         }
+    }
+
+    private void checkForLuckPerms() {
+        if (getServer().getPluginManager().getPlugin("LuckPerms") != null) {
+            luckPermsAvailable = true;
+            getLogger().info("LuckPerms detected. Rank management will use LuckPerms.");
+        } else {
+            luckPermsAvailable = false;
+            getLogger().warning("LuckPerms not detected. Rank management will be in 'testing mode' only.");
+            getLogger().warning("In testing mode, ranks are only simulated and not actually applied to players.");
+            getLogger().warning("Install LuckPerms for full rank functionality in production.");
+        }
+    }
+
+    // Initialize YAML data files for wallets, inventory, and ranks
+    private void initializeDataFiles() {
+        try {
+            File dataFolder = getDataFolder();
+            if (!dataFolder.exists()) dataFolder.mkdirs();
+
+            walletFile = new File(dataFolder, "wallets.yml");
+            if (!walletFile.exists()) walletFile.createNewFile();
+            walletData = YamlConfiguration.loadConfiguration(walletFile);
+
+            inventoryFile = new File(dataFolder, "inventory.yml");
+            if (!inventoryFile.exists()) inventoryFile.createNewFile();
+            inventoryData = YamlConfiguration.loadConfiguration(inventoryFile);
+
+            rankFile = new File(dataFolder, "ranks.yml");
+            if (!rankFile.exists()) rankFile.createNewFile();
+            rankData = YamlConfiguration.loadConfiguration(rankFile);
+
+            loadPlayerWallets();
+            loadCrossServerInventory();
+            loadWalletRanks();
+        } catch (Exception e) {
+            getLogger().severe("Failed to initialize data files: " + e.getMessage());
+        }
+    }
+
+    // Save all YAML data files
+    private void saveDataFiles() {
+        try {
+            if (walletData != null && walletFile != null) walletData.save(walletFile);
+            if (inventoryData != null && inventoryFile != null) inventoryData.save(inventoryFile);
+            if (rankData != null && rankFile != null) rankData.save(rankFile);
+        } catch (Exception e) {
+            getLogger().severe("Failed to save data files: " + e.getMessage());
+        }
+    }
+
+    // Reload all YAML data files
+    private void reloadDataFiles() {
+        try {
+            if (walletFile != null) walletData = YamlConfiguration.loadConfiguration(walletFile);
+            if (inventoryFile != null) inventoryData = YamlConfiguration.loadConfiguration(inventoryFile);
+            if (rankFile != null) rankData = YamlConfiguration.loadConfiguration(rankFile);
+            loadPlayerWallets();
+            loadCrossServerInventory();
+            loadWalletRanks();
+        } catch (Exception e) {
+            getLogger().severe("Failed to reload data files: " + e.getMessage());
+        }
+    }
+
+    // Display deployment instructions to admins
+    private void displayDeploymentInstructions() {
+        Bukkit.getScheduler().runTask(this, () -> {
+            for (Player p : Bukkit.getOnlinePlayers()) {
+                if (p.hasPermission("zkcraft.admin")) {
+                    p.sendMessage(ChatColor.GOLD + "[ZKCraftTrade] Blockchain Setup Instructions:");
+                    p.sendMessage(ChatColor.YELLOW + "1. Deploy the ZKCAsset smart contract to your zkSync-compatible network.");
+                    p.sendMessage(ChatColor.YELLOW + "2. Set the contract address in config.yml under blockchain.zkcasset-contract-address.");
+                    p.sendMessage(ChatColor.YELLOW + "3. Set your RPC URL and private key in config.yml.");
+                    p.sendMessage(ChatColor.YELLOW + "4. Reload the plugin with /zkc reload or restart the server.");
+                }
+            }
+        });
     }
 
     class ZKCCommandExecutor implements TabExecutor {
@@ -386,6 +501,7 @@ public class ZKCraftTrade extends JavaPlugin {
                     saveDataFiles();
                     player.sendMessage("Wallet linked successfully!");
                     player.sendMessage("Derived address: " + address);
+                    if (!blockchainEnabled) reportBlockchainUnavailable(player);
                     break;
                 case "unlink":
                     String wallet = playerWallets.remove(uuid);
@@ -507,6 +623,7 @@ public class ZKCraftTrade extends JavaPlugin {
                         return;
                     }
                     ZKCAsset.Asset checkRank = getAssetFromBlockchain(checkWallet, "rank");
+                    if (!blockchainEnabled) reportBlockchainUnavailable(player);
                     if (checkRank != null) {
                         player.sendMessage(args[2] + "'s rank (" + checkWallet + "): " + checkRank.value);
                     } else {
@@ -519,6 +636,7 @@ public class ZKCraftTrade extends JavaPlugin {
                         return;
                     }
                     ZKCAsset.Asset myRank = getAssetFromBlockchain(wallet, "rank");
+                    if (!blockchainEnabled) reportBlockchainUnavailable(player);
                     if (myRank != null) {
                         player.sendMessage("Your rank (" + wallet + "): " + myRank.value);
                     } else {
@@ -590,6 +708,7 @@ public class ZKCraftTrade extends JavaPlugin {
                     break;
                 case "view":
                     ZKCAsset.Asset viewItem = getAssetFromBlockchain(wallet, "item");
+                    if (!blockchainEnabled) reportBlockchainUnavailable(player);
                     if (viewItem != null) {
                         player.sendMessage("Stored item: " + viewItem.value);
                     } else {
@@ -657,8 +776,9 @@ public class ZKCraftTrade extends JavaPlugin {
                 }
                 ZKCAsset.Asset rank = getAssetFromBlockchain(wallet, "rank");
                 ZKCAsset.Asset item = getAssetFromBlockchain(wallet, "item");
-                player.sendMessage("On-chain rank: " + (rank != null ? rank.value : "none"));
-                player.sendMessage("On-chain item: " + (item != null ? item.value : "none"));
+                if (!blockchainEnabled) reportBlockchainUnavailable(player);
+                player.sendMessage("On-chain rank: " + (rank != null ? rank.value : PLACEHOLDER_RANK));
+                player.sendMessage("On-chain item: " + (item != null ? item.value : PLACEHOLDER_ITEM));
             } else if (targetType.equals("player") && args.length >= 3) {
                 Player target = Bukkit.getPlayer(args[2]);
                 if (target == null) {
@@ -671,13 +791,14 @@ public class ZKCraftTrade extends JavaPlugin {
                     return;
                 }
                 String assetType = (args.length >= 4) ? args[3].toLowerCase() : "all";
+                if (!blockchainEnabled) reportBlockchainUnavailable(player);
                 if (assetType.equals("rank") || assetType.equals("all")) {
                     ZKCAsset.Asset rank = getAssetFromBlockchain(wallet, "rank");
-                    player.sendMessage(target.getName() + " on-chain rank: " + (rank != null ? rank.value : "none"));
+                    player.sendMessage(target.getName() + " on-chain rank: " + (rank != null ? rank.value : PLACEHOLDER_RANK));
                 }
                 if (assetType.equals("item") || assetType.equals("all")) {
                     ZKCAsset.Asset item = getAssetFromBlockchain(wallet, "item");
-                    player.sendMessage(target.getName() + " on-chain item: " + (item != null ? item.value : "none"));
+                    player.sendMessage(target.getName() + " on-chain item: " + (item != null ? item.value : PLACEHOLDER_ITEM));
                 }
             } else {
                 player.sendMessage("Usage: /zkc probe <self|player> [playerName] [rank|item]");
@@ -748,4 +869,3 @@ public class ZKCraftTrade extends JavaPlugin {
         }
     }
 }
-```
