@@ -44,6 +44,49 @@ ZKCraftTrade is a Minecraft Spigot plugin for managing player ranks and a single
    - Use `/zkc reload` to reload config and initialize blockchain connection.
    - If blockchain connection fails, all players will be notified.
 
+## Building and Deploying
+
+### 1. Deploy the Smart Contract
+
+Before building the plugin JAR, you need to deploy the ZKCAsset smart contract:
+
+```bash
+cd xsolla-zk-smart-contracts-starter-kit
+npm install
+npx hardhat compile
+npx hardhat run scripts/deploy-zkcasset.js --network zkxsolla
+```
+
+Take note of the deployed contract address that will be displayed in the console.
+
+### 2. Build the Plugin
+
+```bash
+cd plugin
+mvn clean package
+```
+
+This will create a JAR file in the `target` folder.
+
+### 3. Installation
+
+1. Copy the JAR file to your Spigot server's `plugins` folder
+2. Start the server to generate the config.yml file
+3. Update the config.yml with your smart contract address:
+   ```yaml
+   rpc_url: "https://zkrpc.xsollazk.com"
+   contract_address: "0xYOUR_DEPLOYED_CONTRACT_ADDRESS"
+   ```
+4. Restart the server or use `/zkc reload` to apply changes
+
+### Smart Contract Architecture
+
+The ZKCAsset contract stores the following information:
+- Player ranks (as NFTs with type "rank" and value corresponding to the rank name)
+- Player inventory items (as NFTs with type "item" and value containing serialized item data)
+
+Each player wallet can have multiple NFTs associated with it, each representing a different asset type.
+
 ## Usage
 - **Wallet:** `/zkc wallet <link|unlink>`
 - **Rank:** `/zkc rank <assign|remove|sync|check|list>`
@@ -58,9 +101,31 @@ All commands and subcommands support tab completion for easier use, including pa
 - You can pause/resume polling with `/zkc pausepoll` and `/zkc resumepoll` (admin only).
 - You can manually probe with `/zkc probe self` or `/zkc probe player <playerName> [rank|item]`.
 
+## Wallet Linking
+
+### New Private Key Workflow
+ZKCraftTrade now uses a secure private key workflow for wallet linking:
+
+1. Players provide their private key using: `/zkc wallet link <privateKey>`
+2. The plugin derives the public wallet address from the private key
+3. The derived address is displayed to the player and linked to their account
+4. The private key is not stored, only the derived public address
+
+### Security Notes
+- Private keys should never be shared publicly
+- The plugin only uses the private key at the moment of linking to derive the address
+- The plugin does not store the private key, only the derived public address
+- For maximum security, consider using a dedicated wallet for game interactions
+
+### Commands
+- Link wallet: `/zkc wallet link <privateKey>`
+- Unlink wallet: `/zkc wallet unlink`
+- Sync wallet assets: `/zkc wallet sync`
+- List wallet assets: `/zkc wallet list`
+
 ## Testing
 1. Start a Spigot server with the plugin and LuckPerms.
-2. Link a wallet: `/zkc wallet link 0x123...`
+2. Link a wallet: `/zkc wallet link <privateKey>` (plugin will derive and display your wallet address)
 3. Assign a rank: `/zkc rank assign <player> VIP`
 4. Check rank: `/zkc rank check <player>`
 5. Sync rank: `/zkc rank sync`

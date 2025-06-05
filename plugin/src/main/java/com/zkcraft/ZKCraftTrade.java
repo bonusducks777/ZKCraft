@@ -109,11 +109,14 @@ public class ZKCraftTrade extends JavaPlugin {
     }
 
     private void runSetupWizard() {
+        displayDeploymentInstructions();
         Bukkit.getScheduler().runTaskLater(this, () -> {
             for (Player p : Bukkit.getOnlinePlayers()) {
                 if (p.hasPermission("zkcraft.admin")) {
                     p.sendMessage(ChatColor.AQUA + "[ZKCraftTrade] Setup Wizard: Please check and set your blockchain config values using /zkc config set <key> <value>.");
-                    p.sendMessage(ChatColor.AQUA + "Required: blockchain.rpc-url, blockchain.private-key, blockchain.zkcasset-contract-address");
+                    p.sendMessage(ChatColor.AQUA + "Required: rpc_url, contract_address");
+                    p.sendMessage(ChatColor.AQUA + "RPC URL should be set to: https://zkrpc.xsollazk.com");
+                    p.sendMessage(ChatColor.AQUA + "Contract address should be set to the deployed ZKCAsset address");
                 }
             }
         }, 40L);
@@ -477,7 +480,7 @@ public class ZKCraftTrade extends JavaPlugin {
                     break;
                 case "sync":
                     if (wallet == null) {
-                        player.sendMessage("You must link a wallet first! Use /zkc wallet link <address>");
+                        player.sendMessage("You must link a wallet first! Use /zkc wallet link <privateKey>");
                         return;
                     }
                     ZKCAsset.Asset rank = getAssetFromBlockchain(wallet, "rank");
@@ -512,7 +515,7 @@ public class ZKCraftTrade extends JavaPlugin {
                     break;
                 case "list":
                     if (wallet == null) {
-                        player.sendMessage("You must link a wallet first! Use /zkc wallet link <address>");
+                        player.sendMessage("You must link a wallet first! Use /zkc wallet link <privateKey>");
                         return;
                     }
                     ZKCAsset.Asset myRank = getAssetFromBlockchain(wallet, "rank");
@@ -535,7 +538,7 @@ public class ZKCraftTrade extends JavaPlugin {
             UUID uuid = player.getUniqueId();
             String wallet = playerWallets.get(uuid);
             if (wallet == null) {
-                player.sendMessage("You must link a wallet first! Use /zkc wallet link <address>");
+                player.sendMessage("You must link a wallet first! Use /zkc wallet link <privateKey>");
                 return;
             }
             PlayerInventory inventory = player.getInventory();
@@ -716,8 +719,13 @@ public class ZKCraftTrade extends JavaPlugin {
                 Collections.addAll(subs, "wallet", "rank", "inventory", "reload", "info", "config", "probe", "pausepoll", "resumepoll");
                 return filterPrefix(subs, args[0]);
             }
-            if (args.length == 2 && args[0].equalsIgnoreCase("config")) {
-                return filterPrefix(new ArrayList<>(List.of("set", "view")), args[1]);
+            if (args.length == 2) {
+                if (args[0].equalsIgnoreCase("wallet")) {
+                    return filterPrefix(new ArrayList<>(List.of("link", "unlink", "sync", "list")), args[1]);
+                }
+                if (args[0].equalsIgnoreCase("config")) {
+                    return filterPrefix(new ArrayList<>(List.of("set", "view")), args[1]);
+                }
             }
             if (args.length == 2 && args[0].equalsIgnoreCase("probe")) {
                 return filterPrefix(new ArrayList<>(List.of("self", "player")), args[1]);

@@ -1,0 +1,9 @@
+# ZKCraftTrade Configuration
+rpc_url: "https://zkrpc.xsollazk.com" # zkSync Era RPC URL for Web3j (from hardhat.config.ts)
+contract_address: "" # ZKCAsset contract address (to be filled after deployment)
+poll_interval: 5000 # Blockchain polling interval in milliseconds
+debug_mode: false # Enable for extra logging
+player_data_file: "players.yml" # Player data storage file
+wallet_data_file: "wallets.yml" # Wallet data storage file
+setup_completed: false # Set to true after setup wizard
+save_items_on_quit: true # Save player's blockchain items when they quit
